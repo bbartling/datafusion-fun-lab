@@ -142,12 +142,16 @@ def main() -> int:
         return 1
 
     results: list[Result] = []
+    # Selection sort remains the small-data teaching baseline. For large
+    # inputs, use each implementation's O(n log n) native sort instead.
+    big_data = csv_path.stat().st_size >= 1_000_000_000
+    median_flag = ["--fast-median"] if big_data else []
 
     # --- Pure Python (stdlib only) ---
     stdlib_main = HERE / "python-stdlib" / "main.py"
     try:
         c_s = compile_python(stdlib_main)
-        r_s, peak, proc = run_cmd([PYTHON, str(stdlib_main), str(csv_path), col])
+        r_s, peak, proc = run_cmd([PYTHON, str(stdlib_main), str(csv_path), col, *median_flag])
         results.append(
             Result(
                 "python-stdlib",
@@ -212,7 +216,7 @@ def main() -> int:
         if not ok:
             results.append(Result("raw-rust", compile_s, 0.0, 0.0, False, detail))
         else:
-            r_s, peak, proc = run_cmd([str(raw_bin), str(csv_path), col])
+            r_s, peak, proc = run_cmd([str(raw_bin), str(csv_path), col, *median_flag])
             results.append(
                 Result(
                     "raw-rust",
@@ -226,7 +230,7 @@ def main() -> int:
             if not args.quiet_runs and proc.returncode == 0:
                 print(proc.stdout)
     else:
-        r_s, peak, proc = run_cmd([str(raw_bin), str(csv_path), col])
+        r_s, peak, proc = run_cmd([str(raw_bin), str(csv_path), col, *median_flag])
         results.append(
             Result("raw-rust", None, r_s, peak, proc.returncode == 0, (proc.stderr or "")[-400:])
         )
@@ -269,6 +273,7 @@ def main() -> int:
     print(f"Dataset:       {csv_path}")
     print(f"Column:        {col}")
     print(f"Python:        {PYTHON}")
+    print(f"Median mode:   {'native O(n log n)' if big_data else 'selection sort (small-data baseline)'}")
     print("------------------------------------")
     print(f"{'engine':<20} {'compile_s':>10} {'run_s':>10} {'peak_rss_mb':>12}  status")
     for r in results:

@@ -4,19 +4,18 @@ use std::error::Error;
 mod analytics;
 mod models;
 
-use analytics::all_summary_stats;
-
 fn main() -> Result<(), Box<dyn Error>> {
     // Parse CLI arguments
     let args: Vec<String> = env::args().collect();
 
-    if args.len() != 3 {
-        eprintln!("Usage: rust-fun <csv-file> <column>");
+    if !(args.len() == 3 || (args.len() == 4 && args[3] == "--fast-median")) {
+        eprintln!("Usage: rust-fun <csv-file> <column> [--fast-median]");
         std::process::exit(1);
     }
 
     let file_path = &args[1];
     let column_name = &args[2];
+    let fast_median = args.len() == 4;
 
     // Open CSV and locate requested column
     let mut rdr = csv::Reader::from_path(file_path)?;
@@ -50,7 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Calculate and display statistics
-    match all_summary_stats(&values) {
+    match analytics::all_summary_stats_with_mode(&values, fast_median) {
         Some(result) => {
             println!("==============================");
             println!("Column:             {}", column_name);

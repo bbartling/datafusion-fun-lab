@@ -11,8 +11,10 @@ def main():
     column_name = sys.argv[2]
 
     try:
-        # 2. Open CSV file
-        df = pd.read_csv(file_path)
+        # Discover the header, then load only the requested numeric column.
+        # Avoid materializing the hourly timestamp object column on large files.
+        headers = pd.read_csv(file_path, nrows=0).columns
+        df = pd.read_csv(file_path, usecols=[column_name])
     except FileNotFoundError:
         print(f"Error: File '{file_path}' not found.", file=sys.stderr)
         sys.exit(1)
@@ -21,11 +23,11 @@ def main():
         sys.exit(1)
 
     # 3. Locate requested column
-    if column_name not in df.columns:
+    if column_name not in headers:
         print(f"Column '{column_name}' not found.", file=sys.stderr)
         print("\nAvailable columns in this file:")
         print("-------------------------------")
-        for col in df.columns:
+        for col in headers:
             print(f"- {col}")
         print("-------------------------------")
         sys.exit(1)

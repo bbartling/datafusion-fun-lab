@@ -18,9 +18,14 @@ fn calc_variance_std_dev(data: &[f64], avg: f64) -> (f64, f64) {
 }
 
 // Added the missing `f64` return type here
-fn calc_median(data: &[f64]) -> f64 {
+fn calc_median(data: &[f64], fast: bool) -> f64 {
     let mut scratchpad = data.to_vec();
-    selection_sort(&mut scratchpad); // Fixed function name to match your code below
+    if fast {
+        // Natural big-data path: O(n log n), unlike the teaching O(n^2) sort.
+        scratchpad.sort_unstable_by(|a, b| a.total_cmp(b));
+    } else {
+        selection_sort(&mut scratchpad);
+    }
 
     let mid = scratchpad.len() / 2;
     if scratchpad.len() % 2 == 0 {
@@ -43,7 +48,7 @@ fn selection_sort(arr: &mut [f64]) {
     }
 }
 
-pub fn all_summary_stats(data: &[f64]) -> Option<AnalyticsResult> {
+pub fn all_summary_stats_with_mode(data: &[f64], fast_median: bool) -> Option<AnalyticsResult> {
     if data.is_empty() {
         return None;
     }
@@ -67,7 +72,7 @@ pub fn all_summary_stats(data: &[f64]) -> Option<AnalyticsResult> {
 
     let avg = total / count as f64;
     let (variance, std_dev) = calc_variance_std_dev(data, avg);
-    let median = calc_median(data);
+    let median = calc_median(data, fast_median);
 
     Some(AnalyticsResult {
         count,

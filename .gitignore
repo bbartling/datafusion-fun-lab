@@ -46,3 +46,11 @@ htmlcov/
 *~
 .DS_Store
 Thumbs.db
+
+# Generated large benchmark datasets (never commit these multi-GB files)
+tutorial-one/data/hourly_dry_bulb_5gb.csv
+hourly_dry_bulb_5gb.csv
+**/*_5gb.csv
+**/*_gb.csv
+**/big_*.csv
+**/large_*.csv

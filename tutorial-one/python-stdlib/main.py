@@ -4,12 +4,13 @@ import math
 
 def main():
     # 1. Parse CLI arguments
-    if len(sys.argv) != 3:
-        print("Usage: python script.py <csv-file> <column>", file=sys.stderr)
+    if len(sys.argv) not in (3, 4) or (len(sys.argv) == 4 and sys.argv[3] != "--fast-median"):
+        print("Usage: python script.py <csv-file> <column> [--fast-median]", file=sys.stderr)
         sys.exit(1)
 
     file_path = sys.argv[1]
     column_name = sys.argv[2]
+    fast_median = len(sys.argv) == 4
 
     # 2. Open CSV file and parse headers
     try:
@@ -82,16 +83,20 @@ def main():
 
     std_dev = math.sqrt(variance)
 
-    # Median via hand-coded selection sort (apples-to-apples with a simple
-    # O(n^2) sort — not Python's built-in Timsort).
+    # Small datasets keep the original selection sort for apples-to-apples
+    # teaching.  The big-data harness opts into Timsort; selection sort is
+    # O(n^2) and is not a viable ~5 GB experiment.
     scratchpad = list(values)
     n = len(scratchpad)
-    for i in range(n):
-        min_i = i
-        for j in range(i + 1, n):
-            if scratchpad[j] < scratchpad[min_i]:
-                min_i = j
-        scratchpad[i], scratchpad[min_i] = scratchpad[min_i], scratchpad[i]
+    if fast_median:
+        scratchpad.sort()
+    else:
+        for i in range(n):
+            min_i = i
+            for j in range(i + 1, n):
+                if scratchpad[j] < scratchpad[min_i]:
+                    min_i = j
+            scratchpad[i], scratchpad[min_i] = scratchpad[min_i], scratchpad[i]
 
     mid = count // 2
     if count % 2 == 0:

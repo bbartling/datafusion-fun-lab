@@ -32,6 +32,11 @@ Flags:
 - `--quiet-runs` — hide per-engine stdout (summary only)
 - `--skip-build` — do not `cargo build` (fails if release binaries missing)
 
+For a large input (file size at least 1 GB), the harness automatically passes
+`--fast-median` to the stdlib and raw-Rust programs. This selects the same
+median statistic with native O(n log n) sorting instead of the deliberately
+O(n²) selection sort used by the small-data teaching baseline.
+
 Python still compiles to `.pyc` at first run even without an explicit compile step; the harness measures that via `py_compile` so you can see it next to Rust’s `cargo build --release`.
 
 ## Manual runs
@@ -71,6 +76,40 @@ The release binaries were already built; this run used `--quiet-runs --skip-buil
 Compile time for Python is `py_compile`; Rust compile time is omitted here because
 `--skip-build` was used after rebuilding `raw-rust` with `cargo build --release`.
 Peak RSS is GNU `/usr/bin/time` Max RSS (`%M`) for each child process.
+
+## ~5GB `DryBulb_Temp_F` experiment
+
+The generator is chunk-streaming and keeps the CSV out of git:
+
+```bash
+./env/bin/python tutorial-one/generate_hourly_dry_bulb_5gb.py
+./env/bin/python tutorial-one/benchmark.py \
+  tutorial-one/data/hourly_dry_bulb_5gb.csv DryBulb_Temp_F \
+  --quiet-runs --skip-build
+```
+
+Dataset and run metadata (2026-10-01, America/Chicago):
+
+- File: `tutorial-one/data/hourly_dry_bulb_5gb.csv` (ignored; never committed)
+- Rows: **192,400,000**; size: **5,002,400,025** bytes (**4.6588** GiB)
+- Median: the big-file run uses native O(n log n) median paths for
+  `python-stdlib` and `raw-rust`; Pandas and both DataFusion engines use their
+  native aggregate implementations. This is intentionally not the small-file
+  O(n²) selection-sort comparison.
+
+| Engine | Run (s) | Peak RSS (MB) | Status |
+|---|---:|---:|---|
+| `python-stdlib` | 148.4826 | 9586.77 | OK |
+| `python-pandas` | 41.3542 | 7016.17 | OK |
+| `python-datafusion` | 6.0083 | 3678.01 | OK |
+| `raw-rust` | 29.8033 | 2937.71 | OK |
+| `rust-datafusion` | 9.3985 | 1715.76 | OK |
+
+**Takeaway.** On this larger scan, DataFusion's columnar execution and
+streaming/parallel planning can pay off versus Python object-heavy processing,
+while raw Rust remains a low-memory baseline. The result is a scan-and-aggregate
+comparison; the median algorithm is explicitly changed for scale, so it should
+not be read as a selection-sort apples-to-apples result.
 
 ## Apples-to-apples scope
 
