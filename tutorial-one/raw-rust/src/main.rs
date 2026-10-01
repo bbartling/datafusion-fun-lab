@@ -4,7 +4,7 @@ use std::error::Error;
 mod analytics;
 mod models;
 
-use analytics::summary_stats;
+use analytics::all_summary_stats;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Parse CLI arguments
@@ -50,15 +50,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Calculate and display statistics
-    match summary_stats(&values) {
+    match all_summary_stats(&values) {
         Some(result) => {
             println!("==============================");
-            println!("Column:  {}", column_name);
-            println!("Count:   {}", result.count);
-            println!("Total:   {:.2}", result.total);
-            println!("Min:     {:.2}", result.min);
-            println!("Max:     {:.2}", result.max);
-            println!("Average: {:.2}", result.avg);
+            println!("Column:             {}", column_name);
+            println!("Count:              {}", result.count);
+            println!("Total:              {:.2}", result.total);
+            println!("Min:                {:.2}", result.min);
+            println!("Max:                {:.2}", result.max);
+            println!("Average:            {:.2}", result.avg);
+            println!("Median:             {:.2}", result.median); // Added
+            println!("Sample Variance:    {:.4}", result.variance);
+            println!("Sample Std Dev:     {:.4}", result.std_dev);
             println!("==============================");
         }
         None => {

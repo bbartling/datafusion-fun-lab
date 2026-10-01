@@ -1,205 +1,89 @@
-# NOTES
+# Tutorial one — same-column stats bake-off
 
-## Raw Rust
+Same CSV + same column, compared across:
 
-```
-cd /home/ben/Desktop/datafusion-fun-lab/tutorial-one/raw-rust
-cargo build --release
-```
-
-## Python 
-
-```bash
-
-$ python tutorial-one/python-datafusion/main.py ./data.csv oa_t
-Python Object Type: <class 'datafusion.dataframe.DataFrame'>
-DataFrame Schema:
-count: int64 not null
-total: double
-min: double
-max: double
-avg: double
-
-Visual Output:
-DataFrame()
-+-------+--------------------+-----------+------------+------------------+
-| count | total              | min       | max        | avg              |
-+-------+--------------------+-----------+------------+------------------+
-| 34791 | 2555165.7458319995 | 47.330933 | 105.688805 | 73.4432969972694 |
-+-------+--------------------+-----------+------------+------------------+
-==============================
-Engine:  Apache DataFusion (Python)
-Column:  oa_t
-Count:   34791
-Total:   2555165.75
-Min:     47.33
-Max:     105.69
-Average: 73.44
-==============================
-
-```
-
-To look at your data right at that moment, you can print a visual layout of the DataFrame or inspect its exact type using two distinct approaches. [1] 
-
-### How to Print the DataFrame and its Data Type
-To see your data formatted cleanly inside the terminal without extracting batches manually, use df.show(). To check its Python runtime type, you can pass it to type(): [1] 
-
-```bash
-
-try:
-    df = ctx.sql(query)
-    
-    # 1. Print the actual type of the object
-    print("Python Object Type:", type(df))
-    
-    # 2. Print out the structured data schema (columns and Arrow data types)
-    print("DataFrame Schema:")
-    print(df.schema())
-
-    # 3. Print a clean, formatted plain-text table to your console
-    print("\nVisual Output:")
-    df.show()
-    except Exception as e:
-    print(f"Error: {e}")
-
-```
-------------------------------
-### How is a DataFusion DataFrame different from a Pandas DataFrame?
-
-| Feature | Apache DataFusion DataFrame | Pandas DataFrame |
+| Engine | Directory | How it runs |
 |---|---|---|
-| Evaluation Strategy | Lazy Evaluation. Calling ctx.sql() only constructs a logical query map. No files are read and no math is done until you call a trigger method like .show() or .collect(). | Eager Evaluation. It reads the file, parses strings, loads memory blocks, and computes math values completely and immediately the moment you declare it. |
-| In-Memory Format | Built on top of Apache Arrow. Data is stored continuously in standardized columnar arrays layout, allowing instant vector optimization across CPU cores. | Traditionally built on top of NumPy arrays. It handles data in a row-and-column block grid which introduces overhead on big memory files. |
-| Scalability | Designed for massive datasets. It streams data dynamically from your disk or cloud buckets in small bite-sized chunks without blowing up your system's RAM. | Bound to your machine's physical limits. The entire dataset must fit directly into your system memory, frequently leading to OutOfMemory exceptions on large files. |
-| Underlying Engine | A lightweight abstraction layer written over a high-performance query execution framework built natively in Rust. | A framework written primarily in C and Python. |
+| Pure Python (stdlib `csv` + math) | `python-stdlib/` | `python main.py <csv> <col>` |
+| Pandas | `python-pandas/` | `python main.py <csv> <col>` |
+| Apache DataFusion (Python) | `python-datafusion/` | `python main.py <csv> <col>` |
+| Raw Rust (`csv` crate) | `raw-rust/` | `cargo build --release` → `target/release/rust-fun` |
+| Apache DataFusion (Rust) | `rust-datafusion/` | `cargo build --release` → `target/release/rust-fun-apache` |
 
-### Interoperability Tip
-If you ever need to use a Pandas method on your output, you can bridge them instantly! Calling df.to_pandas() triggers DataFusion to process your query plan via Arrow and output a native Pandas DataFrame object directly into your environment. [1, 2] 
-Would you like to see how to completely rewrite your raw SQL text query using DataFusion's programmatic DataFrame API (e.g., using .select() and .aggregate())? [3, 4] 
+Metrics printed by each engine: count, total, min, max, average, median, sample variance, sample std dev.
 
-[1] [https://datafusion.apache.org](https://datafusion.apache.org/python/user-guide/dataframe/index.html)
-[2] [https://datafusion.apache.org](https://datafusion.apache.org/python/user-guide/common-operations/basic-info.html)
-[3] [https://datafusion.apache.org](https://datafusion.apache.org/user-guide/dataframe.html)
-[4] [https://datafusion.apache.org](https://datafusion.apache.org/python/autoapi/datafusion/dataframe/index.html)
+## One-shot parent benchmark
 
-
-## Rust
+From the lab venv (or any env with `pandas` + `datafusion` installed for the Python DF path):
 
 ```bash
-    // 4. Execute the query
-    let df = match ctx.sql(&query).await {
-        Ok(frame) => frame,
-        Err(e) => {
-            eprintln!("Error executing query (Check if column '{}' exists): {}", column_name, e);
-            std::process::exit(1);
-        }
-    };
-
-    // --- RUST DATAFRAME INSPECTION BLOCK ---
-    
-    // 1. Print the actual rust type string name (Will evaluate to datafusion::dataframe::DataFrame)
-    println!("Rust Object Type: {}", std::any::type_name_of_val(&df));
-    
-    // 2. Print out the logical schema definition matching your query plan
-    println!("DataFrame Schema: {:?}", df.schema());
-
-    // 3. Print a clean, formatted ASCII text table layout directly to your stdout console
-    println!("\nVisual Output:");
-    df.clone().show().await?; // We .clone() it because .show() consumes the dataframe streaming reference
-    
-    // ----------------------------------------
-
-    // 5. Collect the results back into Apache Arrow RecordBatches
-    let results = df.collect().await?;
-
-```
-
-
-
-```bash
-# 1. Change your directory to the Rust project folder
-cd /home/ben/Desktop/datafusion-fun-lab/tutorial-one/rust-datafusion/
-
-# 2. Run the application using cargo, pointing back to your CSV dataset
-cargo run -- /home/ben/Desktop/datafusion-fun-lab/data.csv oa_t
-```
-
-------------------------------
-
-
-## Benchmarking 
-
-```
 cd /home/ben/Desktop/datafusion-fun-lab
-python tutorial-one/benchmark.py ./data.csv oa_t
-
+./env/bin/python tutorial-one/benchmark.py ./data.csv oa_t
 ```
 
-That is a massive difference! Look at those numbers side-by-side:
+What the parent does:
 
-* Pandas Peak RAM: 8.53 MB
-* DataFusion Peak RAM: 0.03 MB
+1. **Compile timers** — `py_compile` for each Python `main.py` (bytecode); `cargo build --release` for each Rust crate (cold builds include dependency compile).
+2. **Run timers** — each engine as a **subprocess** with the same `<csv> <column>` so results are comparable.
+3. Prints a summary table: `compile_s`, `run_s`, **peak_rss_mb** (GNU `/usr/bin/time` Max RSS per child), OK/FAIL.
 
-DataFusion crunched the exact same statistics while using less than 1% of the memory that Pandas required.
-## Why is the memory gap so large?
-This highlights the fundamental difference between the two architectures:
+Flags:
 
-   1. Pandas (Eager Ingestion): Pandas allocated 8.53 MB because it immediately read the entire CSV file, parsed the text strings, allocated giant memory blocks, and loaded all 34,791 rows into your RAM at the exact same time.
-   2. DataFusion (Streaming & Lazy Evaluation): DataFusion only allocated 0.03 MB because it reads the file in tiny, bite-sized Apache Arrow RecordBatches. It streams chunks sequentially through the CPU registers and clears them out instantly. The full file is never held inside your RAM at any single moment.
+- `--quiet-runs` — hide per-engine stdout (summary only)
+- `--skip-build` — do not `cargo build` (fails if release binaries missing)
 
-This architectural edge is why projects like open-fdd choose DataFusion. When handling months of high-frequency building sensor data or IoT telemetry, Pandas can easily cause a system crash by running out of memory. DataFusion, on the other hand, maintains a flat, ultra-low memory footprint whether processing a 1 MB file or a 100 GB dataset.
-Where would you like to take your lab next? We can:
+Python still compiles to `.pyc` at first run even without an explicit compile step; the harness measures that via `py_compile` so you can see it next to Rust’s `cargo build --release`.
 
-* Add a WHERE clause filter to run benchmarks on sliced time-series data.
-* Write a quick snippet to convert your CSV file into a compressed binary Parquet file to see how fast DataFusion can read it.
+## Manual runs
 
-------------------------------
+```bash
+# Pure Python
+./env/bin/python tutorial-one/python-stdlib/main.py ./data.csv oa_t
 
+# Pandas
+./env/bin/python tutorial-one/python-pandas/main.py ./data.csv oa_t
 
-## 📊 The Three-Tier Architectural Spectrum
+# DataFusion (Python)
+./env/bin/python tutorial-one/python-datafusion/main.py ./data.csv oa_t
 
-| Metric | 🐼 Pandas | 🦀 Raw Rust | 🚀 Apache DataFusion |
-|---|---|---|---|
-| Strategy | Eager Ingestion | Naive Allocation | Vectorized Streaming |
-| Time | 0.3327 sec (Slowest) | 0.0108 sec (Fastest) | 0.0158 sec (Near-Instant) |
-| Peak RAM | 8.53 MB (High) | 221.29 MB (Extreme Spike) | 0.03 MB (Ultra-Efficient) |
+# Raw Rust
+cd tutorial-one/raw-rust && cargo build --release
+./target/release/rust-fun ../../data.csv oa_t
 
-------------------------------
-
-### 🔍 Architectural Analysis: What is happening under the hood?## 1. 🐼 Pandas: The Eager Heavyweight
-Pandas hits the middle ground for memory but loses drastically on speed.
-
-* The Speed Penalty: Because Pandas is built on an eager framework wrapper, the moment you tell it to load a CSV, it stops everything to read the entire file on disk, parse row dividers, map data layouts, and generate Python object allocations. It handles calculations line-by-line rather than utilizing concurrent CPU lanes, taking 30x longer than the other setups.
-* The Memory Ceiling: It wraps your raw metrics inside robust, heavy Python structures. At 8.53 MB for a small file, it scales exponentially; throwing a gigabyte-scale telemetry file at it will easily saturate your machine's physical hardware memory limits.
-
-### 2. 🦀 Raw Rust: The Bare-Metal Drag Racer
-Your optimized raw Rust code represents a specialized drag racer—blazing fast, but completely unoptimized for fuel efficiency.
-
-* The Speed Crown: It wins the speed race because it contains zero abstraction. It compiles directly to native machine code that does not waste cycles building dynamic execution plans. It sets up a tight loop tailored only for pulling data out of that layout.
-* The Memory Pitfall: Why the 221.29 MB spike? Your script uses a loop that forces the OS to continuously fragment heap space allocating countless tiny string buffers during iteration. It then pushes every floating-point number into a dynamic array (Vec<f64>), holding all 34,791 records in memory simultaneously. The OS has to aggressively scale up your system's heap allocations to keep up with the unmanaged collection.
-
-### 3. 🚀 Apache DataFusion: The Engineering Miracle
-DataFusion represents why modern production ecosystems like open-fdd choose Apache Arrow architectures over raw application loops.
-
-* The Speed Balance: It finishes mere milliseconds behind bare-metal Rust. What makes this impressive is that DataFusion spent a fraction of that time dynamically generating an entirely complete relational SQL query database execution plan on the fly before crunching the data.
-* The Memory Triumph: It uses a microscopic 0.03 MB because it processes files using sequential Apache Arrow RecordBatches. Instead of building individual row buffers, it loads data blocks cleanly inside contiguous column segments, streams them instantly through your CPU registers, and drops them out of scope before the next segment loads.
-
-------------------------------
-
-
-## We shold be doing this
-
-```rust
-    // Chain programmatic aggregations using the DataFrame API
-    let df = table
-        .aggregate(
-            vec![], // No GROUP BY expressions needed here
-            vec![
-                count(casted_expr.clone()).alias("count"),
-                sum(casted_expr.clone()).alias("total"),
-                min(casted_expr.clone()).alias("min"),
-                max(casted_expr.clone()).alias("max"),
-                avg(casted_expr).alias("avg"),
-            ],
-        )?;
+# DataFusion (Rust)
+cd tutorial-one/rust-datafusion && cargo build --release
+./target/release/rust-fun-apache ../../data.csv oa_t
 ```
+
+## Fresh benchmark (2026-10-01, America/Chicago)
+
+Dataset: `data.csv`, column: `oa_t`, lab venv: `env/bin/python`.
+The release binaries were already built; this run used `--quiet-runs --skip-build`.
+
+| Engine | Compile (s) | Run (s) | Peak RSS (MB) | Status |
+|---|---:|---:|---:|---|
+| `python-stdlib` | 0.0016 | 18.1533 | 12.39 | OK |
+| `python-pandas` | 0.0006 | 0.3908 | 120.32 | OK |
+| `python-datafusion` | 0.0008 | 0.3714 | 185.66 | OK |
+| `raw-rust` | — | 0.6996 | 2.45 | OK |
+| `rust-datafusion` | — | 0.0353 | 73.74 | OK |
+
+Compile time for Python is `py_compile`; Rust compile time is omitted here because
+`--skip-build` was used after rebuilding `raw-rust` with `cargo build --release`.
+Peak RSS is GNU `/usr/bin/time` Max RSS (`%M`) for each child process.
+
+## Apples-to-apples scope
+
+`python-stdlib` and `raw-rust` intentionally use the direct standard-library
+container equivalents: Python `list[float]` and Rust `Vec<f64>` (not
+`array.array` or NumPy). Both use the same load algorithm: read the header,
+find the column index, loop over rows, parse `f64`, and skip unparseable values.
+Python uses the stdlib `csv` module; Rust uses the `csv` crate because Rust has
+no CSV parser in its standard library. Both use hand-coded selection sort for
+the median and sample variance (`n - 1`, or `0.0` for one value).
+
+## Notes
+
+- Prefer the lab `env/` Python so Pandas / DataFusion bindings match.
+- Raw Rust and Rust DataFusion binaries are separate crates; the parent builds both before timing runs unless `--skip-build`.
+- `python-datafusion` and `rust-datafusion` both use SQL aggregates over Arrow; Pandas / stdlib / raw Rust compute in-process over parsed floats.
