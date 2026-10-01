@@ -216,6 +216,20 @@ Peak RSS at the same points (MB):
 | ~1 GB | 1929 | 1465 | 1003 | 589 | **393** |
 | ~5 GB | 9587 | 7016 | 3678 | 2938 | **1716** |
 
+### Plots (wall time & peak RSS)
+
+Regenerated from checked-in `docs/plots/bench_results.csv` (same numbers as the tables above; needs `matplotlib` in the lab venv):
+
+```bash
+./env/bin/python tutorial-one/docs/plots/plot_bench.py
+```
+
+![Wall time vs dataset size](docs/plots/wall_time_vs_size.png)
+
+![Peak RSS vs dataset size](docs/plots/peak_rss_vs_size.png)
+
+Log-x on CSV size for both; wall time also uses log-y so the Pandas → DataFusion crossover (~25 MB → ~1 GB) stays readable next to the slow stdlib path.
+
 ### Practical crossover guidance (from these numbers)
 
 1. **Tiny CSVs** — Pandas (or even stdlib) is fine. DataFusion’s startup / planning overhead dominates; Rust DataFusion wins the tiny table but the absolute gap is sub-second.
@@ -310,12 +324,19 @@ Omit `--skip-build` if release binaries may be missing (cold `cargo build --rele
 2. Record file bytes + row count from the generator stdout (or `wc` / `stat`).
 3. Update the matching section in `tutorial-one/README.md` (tiny / ~25MB / ~1GB / ~5GB), including date + `America/Chicago`.
 4. Refresh the crossover summary table if rankings changed.
-5. Commit **docs + code only** — not the large CSVs:
+5. Update `tutorial-one/docs/plots/bench_results.csv` with the new `run_s` / `peak_rss_mb` rows, then regenerate plots:
+
+```bash
+./env/bin/python tutorial-one/docs/plots/plot_bench.py
+```
+
+6. Commit **docs + code + plot PNGs/CSV/script only** — not the large data CSVs:
 
 ```bash
 git status   # confirm *.csv under tutorial-one/data/ are ignored
 git add tutorial-one/README.md tutorial-one/benchmark.py \
-  tutorial-one/generate_hourly_dry_bulb_5gb.py .gitignore
+  tutorial-one/generate_hourly_dry_bulb_5gb.py .gitignore \
+  tutorial-one/docs/plots/
 git commit -m "Your message"
 git push origin develop
 ```

@@ -1,0 +1,21 @@
+scale,size_bytes,size_label,engine,run_s,peak_rss_mb,notes
+tiny,4239859,~4MB,python-stdlib,18.1533,12.39,O(n^2) selection-sort median
+tiny,4239859,~4MB,python-pandas,0.3908,120.32,O(n^2) teaching baseline file
+tiny,4239859,~4MB,python-datafusion,0.3714,185.66,O(n^2) teaching baseline file
+tiny,4239859,~4MB,raw-rust,0.6996,2.45,O(n^2) selection-sort median
+tiny,4239859,~4MB,rust-datafusion,0.0353,73.74,O(n^2) teaching baseline file
+25mb,26000025,~25MB,python-stdlib,0.6398,62.64,fast-median O(n log n)
+25mb,26000025,~25MB,python-pandas,0.6952,134.59,fast-median O(n log n)
+25mb,26000025,~25MB,python-datafusion,0.6067,240.82,fast-median O(n log n)
+25mb,26000025,~25MB,raw-rust,0.1438,17.31,fast-median O(n log n)
+25mb,26000025,~25MB,rust-datafusion,0.0849,76.45,fast-median O(n log n)
+1gb,1001000025,~1GB,python-stdlib,56.5242,1928.79,fast-median O(n log n)
+1gb,1001000025,~1GB,python-pandas,13.1597,1465.49,fast-median O(n log n)
+1gb,1001000025,~1GB,python-datafusion,2.3508,1002.88,fast-median O(n log n)
+1gb,1001000025,~1GB,raw-rust,6.4030,589.27,fast-median O(n log n)
+1gb,1001000025,~1GB,rust-datafusion,2.0895,393.18,fast-median O(n log n)
+5gb,5002400025,~5GB,python-stdlib,148.4826,9586.77,fast-median O(n log n)
+5gb,5002400025,~5GB,python-pandas,41.3542,7016.17,fast-median O(n log n)
+5gb,5002400025,~5GB,python-datafusion,6.0083,3678.01,fast-median O(n log n)
+5gb,5002400025,~5GB,raw-rust,29.8033,2937.71,fast-median O(n log n)
+5gb,5002400025,~5GB,rust-datafusion,9.3985,1715.76,fast-median O(n log n)
