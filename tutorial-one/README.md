@@ -31,11 +31,13 @@ Flags:
 
 - `--quiet-runs` — hide per-engine stdout (summary only)
 - `--skip-build` — do not `cargo build` (fails if release binaries missing)
+- `--fast-median` — force native O(n log n) median for stdlib / raw-Rust (also auto when CSV ≥ 1 GB)
 
 For a large input (file size at least 1 GB), the harness automatically passes
-`--fast-median` to the stdlib and raw-Rust programs. This selects the same
-median statistic with native O(n log n) sorting instead of the deliberately
-O(n²) selection sort used by the small-data teaching baseline.
+`--fast-median` to the stdlib and raw-Rust programs. Use the flag explicitly
+for mid-size files (e.g. ~25 MB) so they share the same big-data median path.
+This selects the same median statistic with native O(n log n) sorting instead
+of the deliberately O(n²) selection sort used by the small-data teaching baseline.
 
 Python still compiles to `.pyc` at first run even without an explicit compile step; the harness measures that via `py_compile` so you can see it next to Rust’s `cargo build --release`.
 
@@ -76,6 +78,38 @@ The release binaries were already built; this run used `--quiet-runs --skip-buil
 Compile time for Python is `py_compile`; Rust compile time is omitted here because
 `--skip-build` was used after rebuilding `raw-rust` with `cargo build --release`.
 Peak RSS is GNU `/usr/bin/time` Max RSS (`%M`) for each child process.
+
+
+## ~25MB `DryBulb_Temp_F` experiment
+
+Same generator / schema as the 1GB and 5GB DryBulb files, placed **between**
+tiny `data.csv` and ~1GB to probe where Pandas vs DataFusion starts to diverge.
+Uses the **same big-data median path** (native O(n log n)) via harness
+`--fast-median` (file is below the auto ≥1 GB threshold).
+
+```bash
+./env/bin/python tutorial-one/generate_hourly_dry_bulb_5gb.py \
+  -o tutorial-one/data/hourly_dry_bulb_25mb.csv --target-gb 0.025
+./env/bin/python tutorial-one/benchmark.py \
+  tutorial-one/data/hourly_dry_bulb_25mb.csv DryBulb_Temp_F \
+  --quiet-runs --skip-build --fast-median
+```
+
+Dataset and run metadata (2026-10-01, America/Chicago):
+
+- File: `tutorial-one/data/hourly_dry_bulb_25mb.csv` (ignored; never committed)
+- Rows: **1,000,000**; size: **26,000,025** bytes (**0.0242** GiB / ~25 MB decimal target)
+- Median: forced `--fast-median` → native O(n log n) for `python-stdlib` / `raw-rust`. Pandas and both DataFusion engines use their native aggregates.
+
+| Engine | Run (s) | Peak RSS (MB) | Status |
+|---|---:|---:|---|
+| `python-stdlib` | 0.6398 | 62.64 | OK |
+| `python-pandas` | 0.6952 | 134.59 | OK |
+| `python-datafusion` | 0.6067 | 240.82 | OK |
+| `raw-rust` | 0.1438 | 17.31 | OK |
+| `rust-datafusion` | 0.0849 | 76.45 | OK |
+
+**Where ~25MB lands (Pandas vs DataFusion).** At this size, **Python DataFusion is only marginally faster than Pandas** (~0.61s vs ~0.70s) while using **more** peak RSS (~241 MB vs ~135 MB). Rust DataFusion is clearly fastest (~0.085s) with moderate RSS. Compared with ~1GB (where Py DF is ~5–6× faster than Pandas), **~25MB is still in the “startup / planning overhead” regime** — leaving Pandas for DataFusion is not yet strongly motivated on wall clock alone. Use this point as the bridge between tiny `data.csv` and the ~1GB crossover.
 
 ## ~5GB `DryBulb_Temp_F` experiment
 
@@ -158,9 +192,9 @@ the median and sample variance (`n - 1`, or `0.0` for one value).
 | Path | Median | Rest of stats | Intent |
 |---|---|---|---|
 | Small CSV (`data.csv`) | Hand-coded **selection sort** → **O(n²)** | O(n) scan | Teaching toy — comparable stdlib/Rust loops, *not* a production median |
-| Big CSV (≥ 1 GB) | Native sort / engine aggregate → **O(n log n)** median + **O(n)** aggregates | Same | Fair scan-and-aggregate bake-off |
+| Big / mid CSV (`--fast-median` or ≥ 1 GB) | Native sort / engine aggregate → **O(n log n)** median + **O(n)** aggregates | Same | Fair scan-and-aggregate bake-off |
 
-Do not mix the two when quoting speedups. The small-file table is an O(n²) teaching comparison; the 1GB / 5GB tables are O(n log n) sort + O(n) stats.
+Do not mix the two when quoting speedups. The small-file table is an O(n²) teaching comparison; the 25MB / 1GB / 5GB tables are O(n log n) sort + O(n) stats.
 
 ### Measured points from this lab (America/Chicago, 2026-10-01)
 
@@ -169,6 +203,7 @@ Wall clock (`run_s`) and peak RSS (GNU `/usr/bin/time` Max RSS):
 | Scale | Rows (approx) | Fastest engine (run_s) | Pandas run_s | Py DataFusion run_s | Rust DataFusion run_s |
 |---|---:|---:|---:|---:|---:|
 | Tiny `data.csv` | small | `rust-datafusion` **0.035** | 0.391 | 0.371 | **0.035** |
+| ~25 MB DryBulb | 1.0M | `rust-datafusion` **0.085** | 0.695 | 0.607 | **0.085** |
 | ~1 GB DryBulb | 38.5M | `rust-datafusion` **2.09** | 13.16 | 2.35 | **2.09** |
 | ~5 GB DryBulb | 192.4M | `python-datafusion` **6.01** | 41.35 | **6.01** | 9.40 |
 
@@ -177,22 +212,25 @@ Peak RSS at the same points (MB):
 | Scale | stdlib | pandas | py-DF | raw-rust | rust-DF |
 |---|---:|---:|---:|---:|---:|
 | Tiny | 12 | 120 | 186 | 2.5 | 74 |
+| ~25 MB | 63 | 135 | 241 | **17** | 76 |
 | ~1 GB | 1929 | 1465 | 1003 | 589 | **393** |
 | ~5 GB | 9587 | 7016 | 3678 | 2938 | **1716** |
 
 ### Practical crossover guidance (from these numbers)
 
 1. **Tiny CSVs** — Pandas (or even stdlib) is fine. DataFusion’s startup / planning overhead dominates; Rust DataFusion wins the tiny table but the absolute gap is sub-second.
-2. **~1 GB** — Leaving Pandas for DataFusion is already clearly motivated: ~**5–6×** faster wall clock (13s → ~2s) and lower RSS than Pandas. Prefer **Rust DataFusion** here if you want the lowest peak RSS (**393 MB** vs Py DF **1003 MB**) with similar latency (**2.09s** vs **2.35s**).
-3. **~5 GB** — DataFusion remains the right class of tool vs Pandas (~**7×** faster: 41s → ~6–9s). In *this* lab’s measured runs, **Python DataFusion was faster than Rust DataFusion** (**6.01s** vs **9.40s**) while using more RAM (**3678** vs **1716 MB**). Treat that as a measured tradeoff on this machine/workload (CSV scan + SQL aggregates), not a universal ranking — re-run if your schema, filters, or hardware differ.
-4. **Memory vs wall clock** — Raw Rust is a strong low-RSS baseline at every scale but loses to DataFusion on wall clock once n is large (columnar + parallel planning). Stdlib Python is the high-RSS, high-latency teaching path once you leave the tiny file.
-5. **When to leave Pandas** — If your working set is still comfortably under ~hundreds of MB and interactive notebooks matter more than seconds, stay on Pandas. Once you are in the **~1 GB+** CSV scan/aggregate regime (this lab’s DryBulb path), DataFusion (Py or Rust) is the better default for both time and RSS.
+2. **~25 MB** — Still near the tiny regime for Pandas vs **Python** DataFusion: ~0.70s vs ~0.61s with Py DF using *more* RSS (~241 vs ~135 MB). **Rust DataFusion** already leads (~0.085s). Do not cite ~25MB as leave-Pandas evidence for the Python DF path — the clear wall-clock win shows up by ~1GB.
+3. **~1 GB** — Leaving Pandas for DataFusion is already clearly motivated: ~**5–6×** faster wall clock (13s → ~2s) and lower RSS than Pandas. Prefer **Rust DataFusion** here if you want the lowest peak RSS (**393 MB** vs Py DF **1003 MB**) with similar latency (**2.09s** vs **2.35s**).
+4. **~5 GB** — DataFusion remains the right class of tool vs Pandas (~**7×** faster: 41s → ~6–9s). In *this* lab’s measured runs, **Python DataFusion was faster than Rust DataFusion** (**6.01s** vs **9.40s**) while using more RAM (**3678** vs **1716 MB**). Treat that as a measured tradeoff on this machine/workload (CSV scan + SQL aggregates), not a universal ranking — re-run if your schema, filters, or hardware differ.
+5. **Memory vs wall clock** — Raw Rust is a strong low-RSS baseline at every scale but loses to DataFusion on wall clock once n is large (columnar + parallel planning). Stdlib Python is the high-RSS, high-latency teaching path once you leave the tiny file.
+6. **When to leave Pandas** — If your working set is still comfortably under ~tens of MB and interactive notebooks matter more than fractions of a second, stay on Pandas. At ~25MB the Py DF edge is tiny. Once you are in the **~1 GB+** CSV scan/aggregate regime (this lab’s DryBulb path), DataFusion (Py or Rust) is the better default for both time and RSS.
 
 ### Python DataFusion vs Rust DataFusion (this lab)
 
 | Scale | Winner (wall) | Winner (RSS) | Note |
 |---|---|---|---|
 | Tiny | Rust DF | Raw Rust (then Rust DF among DF) | Absolute times are tiny |
+| ~25 MB | Rust DF | Raw Rust (then Rust DF among DF) | Py DF approx Pandas on wall; Rust DF wins |
 | ~1 GB | Rust DF (slightly) | Rust DF | Close on time; Rust DF ~2.5× less RSS |
 | ~5 GB | **Python DF** | Rust DF | Py faster here; Rust leaner |
 
@@ -200,7 +238,7 @@ Honesty check: selection-sort small benches are O(n²) toys. Big-data numbers ab
 
 ## How to test (copy-paste)
 
-Large CSVs are **gitignored** (`tutorial-one/data/hourly_dry_bulb_1gb.csv`, `…_5gb.csv`, and `**/*_1gb.csv` / `**/*_5gb.csv`). Generate them locally; never commit them.
+Large / mid CSVs are **gitignored** (`tutorial-one/data/hourly_dry_bulb_25mb.csv`, `…_1gb.csv`, `…_5gb.csv`, and `**/*_25mb.csv` / `**/*_1gb.csv` / `**/*_5gb.csv`). Generate them locally; never commit them.
 
 ### 0) Lab root + venv
 
@@ -210,11 +248,15 @@ cd /home/ben/Desktop/datafusion-fun-lab
 ./env/bin/python -c "import pandas, datafusion; print('ok')"
 ```
 
-### 1) Generate ~1 GiB and ~5 GiB DryBulb CSVs
+### 1) Generate ~25 MB, ~1 GiB, and ~5 GiB DryBulb CSVs
 
 The chunk-streaming generator writes `Timestamp,DryBulb_Temp_F`, wraps simulated years every 8000 calendar years (no `datetime` overflow), and stops after a chunk boundary near the target size:
 
 ```bash
+# ~25 MB (decimal) → tutorial-one/data/hourly_dry_bulb_25mb.csv
+./env/bin/python tutorial-one/generate_hourly_dry_bulb_5gb.py \
+  -o tutorial-one/data/hourly_dry_bulb_25mb.csv --target-gb 0.025
+
 # ~1 GB (decimal) → tutorial-one/data/hourly_dry_bulb_1gb.csv
 ./env/bin/python tutorial-one/generate_hourly_dry_bulb_5gb.py \
   -o tutorial-one/data/hourly_dry_bulb_1gb.csv --target-gb 1.0
@@ -223,7 +265,8 @@ The chunk-streaming generator writes `Timestamp,DryBulb_Temp_F`, wraps simulated
 ./env/bin/python tutorial-one/generate_hourly_dry_bulb_5gb.py --target-gb 5.0
 
 # confirm ignored
-git check-ignore -v tutorial-one/data/hourly_dry_bulb_1gb.csv \
+git check-ignore -v tutorial-one/data/hourly_dry_bulb_25mb.csv \
+  tutorial-one/data/hourly_dry_bulb_1gb.csv \
   tutorial-one/data/hourly_dry_bulb_5gb.csv
 ```
 
@@ -236,10 +279,15 @@ git check-ignore -v tutorial-one/data/hourly_dry_bulb_1gb.csv \
 
 ### 3) Run the five-engine big-data bench
 
-The harness auto-enables `--fast-median` (native O(n log n)) when the CSV is ≥ 1 GB. Peak RSS is Max RSS from GNU `/usr/bin/time -f %M` (kB → MB) on each child; wall clock is `perf_counter` around that child.
+The harness auto-enables `--fast-median` (native O(n log n)) when the CSV is ≥ 1 GB. For ~25 MB, pass `--fast-median` explicitly so stdlib / raw-Rust share the same big-data median path. Peak RSS is Max RSS from GNU `/usr/bin/time -f %M` (kB → MB) on each child; wall clock is `perf_counter` around that child.
 
 ```bash
-# ~1 GB
+# ~25 MB (force big-data median path)
+./env/bin/python tutorial-one/benchmark.py \
+  tutorial-one/data/hourly_dry_bulb_25mb.csv DryBulb_Temp_F \
+  --quiet-runs --skip-build --fast-median
+
+# ~1 GB (auto --fast-median)
 ./env/bin/python tutorial-one/benchmark.py \
   tutorial-one/data/hourly_dry_bulb_1gb.csv DryBulb_Temp_F \
   --quiet-runs --skip-build
@@ -260,7 +308,7 @@ Omit `--skip-build` if release binaries may be missing (cold `cargo build --rele
 
 1. Capture the harness summary lines (`engine`, `run_s`, `peak_rss_mb`, status).
 2. Record file bytes + row count from the generator stdout (or `wc` / `stat`).
-3. Update the matching section in `tutorial-one/README.md` (tiny / ~1GB / ~5GB), including date + `America/Chicago`.
+3. Update the matching section in `tutorial-one/README.md` (tiny / ~25MB / ~1GB / ~5GB), including date + `America/Chicago`.
 4. Refresh the crossover summary table if rankings changed.
 5. Commit **docs + code only** — not the large CSVs:
 

@@ -133,6 +133,11 @@ def main() -> int:
         action="store_true",
         help="Hide child stdout/stderr (default shows a short tail on failure)",
     )
+    ap.add_argument(
+        "--fast-median",
+        action="store_true",
+        help="Force native O(n log n) median for stdlib/raw-rust (also auto when CSV >= 1 GB)",
+    )
     args = ap.parse_args()
 
     csv_path = Path(args.csv).expanduser().resolve()
@@ -144,7 +149,7 @@ def main() -> int:
     results: list[Result] = []
     # Selection sort remains the small-data teaching baseline. For large
     # inputs, use each implementation's O(n log n) native sort instead.
-    big_data = csv_path.stat().st_size >= 1_000_000_000
+    big_data = args.fast_median or csv_path.stat().st_size >= 1_000_000_000
     median_flag = ["--fast-median"] if big_data else []
 
     # --- Pure Python (stdlib only) ---
