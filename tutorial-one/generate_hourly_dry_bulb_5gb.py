@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Stream a deterministic, hourly dry-bulb CSV until it reaches ~5 GiB.
+"""Stream a deterministic, hourly dry-bulb CSV to a target size (e.g. ~1 or ~5 GB).
 
 The generator never keeps the dataset in memory. It stops after a chunk
 boundary, so the resulting CSV is valid and reproducible and is approximately
-the requested size.
+the requested size. Simulated calendar years wrap every 8,000 years so
+datetime does not overflow for multi-year (or multi-century) hourly spans.
 """
 from __future__ import annotations
 
@@ -55,7 +56,7 @@ def generate(output: Path, target_bytes: int) -> tuple[int, int]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("-o", "--output", type=Path, default=DEFAULT_OUTPUT)
-    ap.add_argument("--target-gb", type=float, default=5.0, help="decimal GB target")
+    ap.add_argument("--target-gb", type=float, default=5.0, help="decimal GB target (e.g. 1.0 or 5.0)")
     args = ap.parse_args()
     size, rows = generate(args.output, int(args.target_gb * 1_000_000_000))
     print(f"output={args.output}")

@@ -54,3 +54,6 @@ hourly_dry_bulb_5gb.csv
 **/*_gb.csv
 **/big_*.csv
 **/large_*.csv
+tutorial-one/data/hourly_dry_bulb_1gb.csv
+hourly_dry_bulb_1gb.csv
+**/*_1gb.csv
