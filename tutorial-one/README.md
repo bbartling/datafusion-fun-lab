@@ -230,6 +230,19 @@ Regenerated from checked-in `docs/plots/bench_results.csv` (same numbers as the 
 
 Log-x on CSV size for both; wall time also uses log-y so the Pandas → DataFusion crossover (~25 MB → ~1 GB) stays readable next to the slow stdlib path.
 
+
+### Package footprint (measured 2026-10-01, America/Chicago)
+
+Measured in the lab's `env/` Python 3.12 environment; wheel sizes are `pip download --no-deps` artifacts, and installed sizes are `du` for the package directory only (not dependencies):
+
+| Implementation | Version | Wheel / crate download | Installed package / release binary |
+|---|---:|---:|---:|
+| Pandas (Python) | 3.0.6 | 10,788,193 bytes (10.8 MB) wheel | 67,438,969 bytes (72 MiB) package directory |
+| DataFusion (Python) | 54.0.0 | 41,050,149 bytes (41.1 MB) wheel | 120,055,800 bytes (115 MiB) package directory |
+| DataFusion (Rust) | 55.1.0 Cargo dependency | 306,973 bytes (307 kB) `.crate` download | 174,912,696 bytes (174.9 MB) `rust-fun-apache` release binary |
+
+**Takeaway.** Python DataFusion has the larger install footprint (about 3.8× the wheel and 1.7× the package directory of Pandas), while the Rust crate download is tiny but the linked release binary is large; footprint is a deployment tradeoff, not a runtime result—this lab's scan benchmarks show DataFusion's runtime advantage becoming clear around the ~1 GB input.
+
 ### Practical crossover guidance (from these numbers)
 
 1. **Tiny CSVs** — Pandas (or even stdlib) is fine. DataFusion’s startup / planning overhead dominates; Rust DataFusion wins the tiny table but the absolute gap is sub-second.
